@@ -55,3 +55,124 @@ alter table #1 add median float
 alter table #1 add mode nvarchar(max)
 alter table #1 add SD float
 alter table #1 add Zero_Values int
+
+
+
+-----------------------------------------------------------------------
+
+DECLARE @sql NVARCHAR(MAX);
+DECLARE @i INT = 1;  -- Start from 1 to match ordinal_position
+DECLARE @j INT;
+SET @j = (SELECT max(ORDINAL_POSITION) FROM #1);  -- Get the number of rows
+
+DECLARE @columnName NVARCHAR(MAX);
+DECLARE @dataType NVARCHAR(MAX);
+
+WHILE @i <= @j
+BEGIN
+    -- Get the column name and data type for the current ordinal position
+    SELECT @columnName = column_name, @dataType = DATA_TYPE 
+    FROM #1 
+    WHERE ordinal_position = @i;
+
+    -- Handle numeric columns
+    IF @dataType IN ('int', 'float', 'real', 'decimal', 'numeric', 'money', 'smallint', 'tinyint')
+    BEGIN
+        -- Construct the dynamic SQL for calculating max, min, mean, stddev, nulls, distinct count, and zero count
+        SET @sql = 'UPDATE #1 SET maximum = (SELECT MAX(' + @columnName + ') FROM EmployeeData) WHERE ordinal_position = ' + CAST(@i AS VARCHAR(MAX));
+        EXEC sp_executesql @sql;
+
+        SET @sql = 'UPDATE #1 SET minimum = (SELECT MIN(' + @columnName + ') FROM EmployeeData) WHERE ordinal_position = ' + CAST(@i AS VARCHAR(MAX));
+        EXEC sp_executesql @sql;
+
+        SET @sql = 'UPDATE #1 SET mean = (SELECT AVG(' + @columnName + ') FROM EmployeeData) WHERE ordinal_position = ' + CAST(@i AS VARCHAR(MAX));
+        EXEC sp_executesql @sql;
+
+        SET @sql = 'UPDATE #1 SET SD = (SELECT STDEV(' + @columnName + ') FROM EmployeeData) WHERE ordinal_position = ' + CAST(@i AS VARCHAR(MAX));
+        EXEC sp_executesql @sql;
+
+        SET @sql = 'UPDATE #1 SET nulls = (SELECT COUNT(*) FROM EmployeeData WHERE ' + @columnName + ' IS NULL) WHERE ordinal_position = ' + CAST(@i AS VARCHAR(MAX));
+        EXEC sp_executesql @sql;
+
+        SET @sql = 'UPDATE #1 SET distinct_count = (SELECT COUNT(DISTINCT ' + @columnName + ') FROM EmployeeData) WHERE ordinal_position = ' + CAST(@i AS VARCHAR(MAX));
+        EXEC sp_executesql @sql;
+
+        SET @sql = 'UPDATE #1 SET zero_values = (SELECT COUNT(*) FROM EmployeeData WHERE ' + @columnName + ' = 0) WHERE ordinal_position = ' + CAST(@i AS VARCHAR(MAX));
+        EXEC sp_executesql @sql;
+
+        -- Add logic for Median
+        SET @sql = 'UPDATE #1 SET median = (
+            SELECT AVG(CAST(' + @columnName + ' AS FLOAT))
+            FROM (
+                SELECT ' + @columnName + ',
+                       ROW_NUMBER() OVER (ORDER BY ' + @columnName + ') AS RowAsc,
+                       COUNT(*) OVER () AS TotalCount
+                FROM EmployeeData
+                WHERE ' + @columnName + ' IS NOT NULL
+            ) AS OrderedValues
+            WHERE RowAsc IN ((TotalCount + 1) / 2, (TotalCount + 2) / 2)
+        ) WHERE ordinal_position = ' + CAST(@i AS VARCHAR(MAX));
+        EXEC sp_executesql @sql;
+
+        -- Add logic for Mode
+        SET @sql = 'UPDATE #1 SET mode = (
+            SELECT TOP 1 ' + @columnName + '
+            FROM EmployeeData
+            GROUP BY ' + @columnName + '
+            ORDER BY COUNT(*) DESC
+        ) WHERE ordinal_position = ' + CAST(@i AS VARCHAR(MAX));
+        EXEC sp_executesql @sql;
+    END
+
+    -- Handle date columns
+    IF @dataType IN ('date', 'datetime', 'datetime2', 'smalldatetime', 'time')
+    BEGIN
+        -- Calculate max and min
+        SET @sql = 'UPDATE #1 SET maximum = (SELECT MAX(' + @columnName + ') FROM EmployeeData) WHERE ordinal_position = ' + CAST(@i AS VARCHAR(MAX));
+        EXEC sp_executesql @sql;
+
+        SET @sql = 'UPDATE #1 SET minimum = (SELECT MIN(' + @columnName + ') FROM EmployeeData) WHERE ordinal_position = ' + CAST(@i AS VARCHAR(MAX));
+        EXEC sp_executesql @sql;
+
+        -- Nulls and distinct counts
+        SET @sql = 'UPDATE #1 SET nulls = (SELECT COUNT(*) FROM EmployeeData WHERE ' + @columnName + ' IS NULL) WHERE ordinal_position = ' + CAST(@i AS VARCHAR(MAX));
+        EXEC sp_executesql @sql;
+
+        SET @sql = 'UPDATE #1 SET distinct_count = (SELECT COUNT(DISTINCT ' + @columnName + ') FROM EmployeeData) WHERE ordinal_position = ' + CAST(@i AS VARCHAR(MAX));
+        EXEC sp_executesql @sql;
+
+        -- Count zero values for dates (assuming a specific zero date, e.g., '1900-01-01')
+        SET @sql = 'UPDATE #1 SET zero_values = (SELECT COUNT(*) FROM EmployeeData WHERE ' + @columnName + ' = ''1900-01-01'') WHERE ordinal_position = ' + CAST(@i AS VARCHAR(MAX));
+        EXEC sp_executesql @sql;
+
+        -- Add logic for Mode
+        SET @sql = 'UPDATE #1 SET mode = (
+            SELECT TOP 1 CONVERT(NVARCHAR, ' + @columnName + ', 120)
+            FROM EmployeeData
+            GROUP BY ' + @columnName + '
+            ORDER BY COUNT(*) DESC
+        ) WHERE ordinal_position = ' + CAST(@i AS VARCHAR(MAX));
+        EXEC sp_executesql @sql;
+    END
+
+    -- Handle non-numeric columns for max and min
+    IF @dataType IN ('varchar', 'nvarchar', 'text', 'char', 'nchar')
+    BEGIN
+        SET @sql = 'UPDATE #1 SET maximum = (SELECT MAX(' + @columnName + ') FROM EmployeeData) WHERE ordinal_position = ' + CAST(@i AS VARCHAR(MAX));
+        EXEC sp_executesql @sql;
+
+        SET @sql = 'UPDATE #1 SET minimum = (SELECT MIN(' + @columnName + ') FROM EmployeeData) WHERE ordinal_position = ' + CAST(@i AS VARCHAR(MAX));
+        EXEC sp_executesql @sql;
+
+        -- No mean, median, or standard deviation for non-numeric columns
+    END
+
+    -- Increment to the next column
+    SET @i = @i + 1;  
+END
+
+-- Select the updated profiling results
+SELECT * FROM #1;
+
+-- Clean up
+DROP TABLE #1;

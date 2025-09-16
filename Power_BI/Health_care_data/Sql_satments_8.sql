@@ -1,5 +1,5 @@
 
-
+create database [column distribution]
 
 CREATE TABLE SampleData (
     ID INT PRIMARY KEY,
@@ -27,3 +27,31 @@ VALUES
 (8, 'Hannah Baker', 33, '1990-12-21', 52000.00, 1, '2020-11-15 13:20:00', 'Tester', 4.1, 'TST'),
 (9, 'Ian Malcolm', 38, '1985-09-30', 65000.00, 1, '2016-05-10 12:00:00', 'Analyst', 4.4, 'ANL'),
 (10, 'Jack Sparrow', 44, '1979-04-01', 72000.00, 1, '2014-07-20 15:00:00', 'Captain', 4.7, 'CAP');
+
+
+------------------------------------------------------------------------------------------------------------
+
+
+select * from SampleData
+
+select * from INFORMATION_SCHEMA.COLUMNS where TABLE_NAME like 'sampledata'
+
+
+declare @i int = 1
+declare @sql nvarchar(max)
+declare @j int
+
+set @j = (select max(ordinal_position) from INFORMATION_SCHEMA.COLUMNS where TABLE_NAME like 'sampledata')
+declare @columnname varchar(max)
+
+while @i<=@j
+begin
+
+set @columnname = (select column_name from INFORMATION_SCHEMA.COLUMNS where TABLE_NAME like 'sampledata' and ORDINAL_POSITION = @i)
+
+set @sql = 'select ' + @columnname + ' ,count(*) [Frequency] from SampleData group by ' +  @columnname + ' order by count(*) desc'
+
+exec sp_executesql @sql
+
+set @i = @i + 1
+end
