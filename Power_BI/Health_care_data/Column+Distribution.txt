@@ -1,0 +1,25 @@
+
+
+select * from SampleData
+
+select * from INFORMATION_SCHEMA.COLUMNS where TABLE_NAME like 'sampledata'
+
+
+declare @i int = 1
+declare @sql nvarchar(max)
+declare @j int
+
+set @j = (select max(ordinal_position) from INFORMATION_SCHEMA.COLUMNS where TABLE_NAME like 'sampledata')
+declare @columnname varchar(max)
+
+while @i<=@j
+begin
+
+set @columnname = (select column_name from INFORMATION_SCHEMA.COLUMNS where TABLE_NAME like 'sampledata' and ORDINAL_POSITION = @i)
+
+set @sql = 'select ' + @columnname + ' ,count(*) [Frequency] from SampleData group by ' +  @columnname + ' order by count(*) desc'
+
+exec sp_executesql @sql
+
+set @i = @i + 1
+end
