@@ -1,0 +1,12 @@
+
+
+select top 5 * from new_table
+
+select 
+HospitalID,
+AdmissionDate,
+TotalAdmissions,
+Readmissions,
+Infections,
+TotalDeaths
+from new_table
